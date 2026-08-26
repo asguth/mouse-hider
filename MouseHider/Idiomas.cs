@@ -58,7 +58,15 @@ static class Idiomas
         ["pausado"] = "Pausado",
         ["ativo"] = "Ativo",
         ["segundos_curto"] = "s",
-        ["minutos_curto"] = "min"
+        ["contador"] = "Escondendo em",
+        ["contador_pausado"] = "pausado",
+        ["contador_escondido"] = "cursor escondido",
+        ["buscar_atualizacao"] = "Procurar atualizações",
+        ["verificando"] = "verificando...",
+        ["atualizado"] = "você já está na versão mais recente",
+        ["nova_versao"] = "versão {0} disponível",
+        ["baixar"] = "Baixar",
+        ["falha_verificar"] = "não deu para verificar agora"
     };
 
     static readonly Dictionary<string, string> En = new()
@@ -84,7 +92,16 @@ static class Idiomas
         ["pausado"] = "Paused",
         ["ativo"] = "Active",
         ["segundos_curto"] = "s",
-        ["minutos_curto"] = "min"
+        ["minutos_curto"] = "min",
+        ["contador"] = "Hiding in",
+        ["contador_pausado"] = "paused",
+        ["contador_escondido"] = "cursor hidden",
+        ["buscar_atualizacao"] = "Check for updates",
+        ["verificando"] = "checking...",
+        ["atualizado"] = "you're on the latest version",
+        ["nova_versao"] = "version {0} available",
+        ["baixar"] = "Download",
+        ["falha_verificar"] = "couldn't check right now"
     };
 
     static readonly Dictionary<string, string> Es = new()
@@ -110,6 +127,15 @@ static class Idiomas
         ["pausado"] = "En pausa",
         ["ativo"] = "Activo",
         ["segundos_curto"] = "s",
-        ["minutos_curto"] = "min"
+        ["minutos_curto"] = "min",
+        ["contador"] = "Ocultando en",
+        ["contador_pausado"] = "en pausa",
+        ["contador_escondido"] = "cursor oculto",
+        ["buscar_atualizacao"] = "Buscar actualizaciones",
+        ["verificando"] = "comprobando...",
+        ["atualizado"] = "ya tienes la última versión",
+        ["nova_versao"] = "versión {0} disponible",
+        ["baixar"] = "Descargar",
+        ["falha_verificar"] = "no se pudo comprobar ahora"
     };
 }

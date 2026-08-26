@@ -22,7 +22,7 @@ sealed class SettingsForm : Form
         MaximizeBox = false;
         MinimizeBox = true;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(640, 380);
+        ClientSize = new Size(640, 400);
         Font = Theme.Fonte();
         Icon = Logo.Criar(32);
 
@@ -208,8 +208,26 @@ sealed class SettingsForm : Form
         MarcarPreset();
 
         // Posicao calculada a partir da altura real dos chips: se eles quebrarem em duas linhas
-        // (fonte maior, idioma mais longo), o atalho desce junto em vez de ficar por baixo.
-        var y = atalhos.Top + atalhos.PreferredSize.Height + 24;
+        // (fonte maior, idioma mais longo), o resto desce junto em vez de ficar por baixo.
+        var y = atalhos.Top + atalhos.PreferredSize.Height + 22;
+
+        var rotuloContador = Texto("", 0, y, Theme.TextoFraco);
+        var kitt = new ContadorKitt { Location = new Point(0, y + 22), Width = 420 };
+        kitt.Estado = () =>
+        {
+            var total = _config.IdleSeconds * 1000.0;
+            var restante = Math.Max(0, total - Native.IdleMilliseconds());
+            rotuloContador.Text = _config.Paused
+                ? Idiomas.T("contador_pausado")
+                : restante <= 0
+                    ? Idiomas.T("contador_escondido")
+                    : Idiomas.T("contador") + "  " + (restante / 1000.0).ToString("0.0") + " " + Idiomas.T("segundos_curto");
+            return (restante, total, _config.Paused);
+        };
+        pagina.Controls.Add(rotuloContador);
+        pagina.Controls.Add(kitt);
+
+        y = kitt.Bottom + 24;
         pagina.Controls.Add(Texto(Idiomas.T("atalho"), 0, y, Theme.Texto, Theme.Fonte(10f)));
 
         var captura = new CapturaAtalho { Location = new Point(0, y + 26), Font = Theme.Fonte(10f) };
@@ -288,6 +306,48 @@ sealed class SettingsForm : Form
         }
         pagina.Controls.Add(idiomas);
         pagina.Controls.Add(Texto(Idiomas.T("idioma_obs"), 0, 200, Theme.TextoFraco));
+
+        var procurar = new BotaoChip(Idiomas.T("buscar_atualizacao")) { Font = Theme.Fonte(), Location = new Point(0, 244) };
+        procurar.Ajustar();
+        var estadoBusca = Texto("", procurar.Right + 12, 252, Theme.TextoFraco);
+
+        var temNova = false;
+        procurar.Click += async (_, _) =>
+        {
+            // Depois de achar versao nova o mesmo botao vira "Baixar".
+            if (temNova) { AbrirNoNavegador(Atualizacao.Pagina); return; }
+
+            procurar.Enabled = false;
+            estadoBusca.Text = Idiomas.T("verificando");
+            estadoBusca.ForeColor = Theme.TextoFraco;
+
+            var (resultado, versao) = await Atualizacao.Verificar(Versao());
+            if (procurar.IsDisposed) return; // usuario pode ter fechado a janela durante a consulta
+
+            switch (resultado)
+            {
+                case Atualizacao.Resultado.TemNova:
+                    temNova = true;
+                    estadoBusca.Text = string.Format(Idiomas.T("nova_versao"), versao);
+                    estadoBusca.ForeColor = Theme.Texto;
+                    procurar.Text = Idiomas.T("baixar");
+                    procurar.Selecionado = true;
+                    procurar.Ajustar();
+                    estadoBusca.Left = procurar.Right + 12;
+                    break;
+                case Atualizacao.Resultado.Atualizado:
+                    estadoBusca.Text = Idiomas.T("atualizado");
+                    break;
+                default:
+                    estadoBusca.Text = Idiomas.T("falha_verificar");
+                    break;
+            }
+
+            procurar.Enabled = true;
+        };
+
+        pagina.Controls.Add(procurar);
+        pagina.Controls.Add(estadoBusca);
 
         return pagina;
     }

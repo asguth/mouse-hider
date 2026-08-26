@@ -52,7 +52,9 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "dist\{#MyAppExe}"; DestDir: "{app}"; Flags: ignoreversion
+; A pasta inteira: o app e publicado self-contained sem arquivo unico, para nao parecer
+; packer para heuristica de antivirus. O instalador e que entrega tudo junto.
+Source: "dist\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"

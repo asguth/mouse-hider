@@ -30,10 +30,16 @@ $iscc = @(
 ) | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $iscc) { throw "Inno Setup nao encontrado (winget install JRSoftware.InnoSetup)" }
 
-# Executaveis nativos nao disparam excecao no PowerShell: o codigo de saida tem que ser conferido na mao.
+# Executaveis nativos nao disparam excecao no PowerShell: o codigo de saida tem que ser
+# conferido na mao. E com ErrorActionPreference='Stop' qualquer linha que a ferramenta
+# escreva no stderr vira erro fatal — o git avisa sobre CRLF ali e derrubava o release.
+# Por isso a preferencia volta para 'Continue' durante a chamada nativa.
 function Executar($descricao, $comando, $argumentos) {
     Write-Host "==> $descricao" -ForegroundColor Cyan
-    & $comando @argumentos
+    $anterior = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { & $comando @argumentos 2>&1 | ForEach-Object { "$_" } }
+    finally { $ErrorActionPreference = $anterior }
     if ($LASTEXITCODE -ne 0) { throw "$descricao falhou (exit $LASTEXITCODE)" }
 }
 
@@ -42,22 +48,34 @@ $csproj = "MouseHider\MouseHider.csproj"
 (Get-Content $csproj -Raw) -replace '<Version>[\d.]+</Version>', "<Version>$Versao</Version>" |
     Set-Content $csproj -Encoding utf8 -NoNewline
 
-# 2. Executavel unico, self-contained: roda sem .NET instalado.
-Executar "publicando o exe" $dotnet @(
+# 2. Self-contained (roda sem .NET instalado), mas em PASTA, nao em arquivo unico.
+#    PublishSingleFile com compressao produz um auto-extrator, e heuristica de antivirus
+#    trata auto-extrator como packer — foi o que deu Trojan:Win32/Wacatac.C!ml no
+#    VirusTotal. Em pasta, o exe e um apphost comum e as DLLs sao .NET normais.
+#    Quem junta tudo num download unico e o instalador.
+Executar "publicando o app" $dotnet @(
     'publish', 'MouseHider\MouseHider.csproj', '-c', 'Release', '-r', 'win-x64',
-    '--self-contained', 'true', '-p:PublishSingleFile=true', '-p:EnableCompressionInSingleFile=true',
-    '-p:IncludeNativeLibrariesForSelfExtract=true', '-p:DebugType=none', '-o', 'dist', '--nologo'
+    '--self-contained', 'true', '-p:PublishSingleFile=false', '-p:DebugType=none',
+    '-o', 'dist', '--nologo'
 )
 
-Executar "verificando o exe publicado" "dist\MouseHider.exe" @('--selftest')
+# Start-Process -Wait: MouseHider e WinExe, entao "& exe" devolve o prompt na hora e o
+# $LASTEXITCODE nao vale nada — o selftest passaria despercebido mesmo falhando.
+Write-Host "==> rodando o selftest" -ForegroundColor Cyan
+$teste = Start-Process "dist\MouseHider.exe" -ArgumentList '--selftest' -Wait -PassThru
+if ($teste.ExitCode -ne 0) { throw "selftest falhou (exit $($teste.ExitCode))" }
 
 # 3. Instalador. OutputBaseFilename esta fixo no .iss: e o que sustenta o link permanente.
 Executar "compilando o instalador" $iscc @("/DMyAppVersion=$Versao", 'installer\MouseHider.iss')
 
 # 4. Commit e tag.
-git add -A
-git diff --cached --quiet
-if ($LASTEXITCODE -ne 0) {
+Executar "preparando o commit" 'git' @('add', '-A')
+
+$ErrorActionPreference = 'Continue'
+git diff --cached --quiet 2>&1 | Out-Null
+$temMudanca = $LASTEXITCODE -ne 0   # 1 = ha algo staged
+$ErrorActionPreference = 'Stop'
+if ($temMudanca) {
     Executar "commit" 'git' @('commit', '-m', "Versao $Versao")
 }
 Executar "tag" 'git' @('tag', '-a', "v$Versao", '-m', "Versao $Versao")

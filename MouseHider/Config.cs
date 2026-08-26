@@ -92,6 +92,27 @@ sealed class Config
         }
     }
 
+    /// <summary>
+    /// Se o autostart esta ligado mas aponta para outro caminho, reescreve para o exe atual.
+    /// Sem isso, mover ou reinstalar o app deixa o Windows tentando abrir um arquivo que nao
+    /// existe mais — e falha calada, ninguem descobre ate perceber que nao inicia sozinho.
+    /// </summary>
+    public static void CorrigirAutoStart()
+    {
+        try
+        {
+            using var k = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
+            if (k?.GetValue(RunValue) is not string atual) return;
+
+            var esperado = "\"" + Environment.ProcessPath + "\"";
+            if (string.Equals(atual, esperado, StringComparison.OrdinalIgnoreCase)) return;
+
+            k.SetValue(RunValue, esperado);
+            Log("autostart corrigido: " + atual + " -> " + esperado);
+        }
+        catch (Exception e) { Log("falha ao corrigir autostart: " + e.Message); }
+    }
+
     // --- log ---
 
     public static void Log(string msg)

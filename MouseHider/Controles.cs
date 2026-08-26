@@ -396,3 +396,106 @@ static class Atalho
         return (mods | ModNoRepeat, (int)tecla);
     }
 }
+
+/// <summary>
+/// Contador regressivo ate esconder o cursor, com varredura estilo KITT: 18 lampadas em
+/// vaivem, com rastro. A varredura acelera conforme o tempo acaba — sem isso a barra fica
+/// com a mesma cara faltando 30 s ou 300 ms.
+/// </summary>
+sealed class ContadorKitt : Control
+{
+    const int Lampadas = 18;
+    const int Margem = 6;
+
+    readonly System.Windows.Forms.Timer _tique = new() { Interval = 33 }; // ~30 fps
+    float _posicao;          // 0..Lampadas-1, onde esta o foco da varredura
+    int _sentido = 1;
+    float _brilhoPausa;      // respiro lento quando esta pausado ou ja escondido
+
+    /// <summary>Devolve (ms restantes ate esconder, ms totais, pausado). Restante 0 = escondido.</summary>
+    public Func<(double Restante, double Total, bool Pausado)>? Estado { get; set; }
+
+    public ContadorKitt()
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
+                 ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+        Height = 30;
+        _tique.Tick += (_, _) => Avancar();
+    }
+
+    // So anima com a janela na frente: o app passa 99% do tempo escondido na bandeja.
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        base.OnVisibleChanged(e);
+        if (Visible) _tique.Start(); else _tique.Stop();
+    }
+
+    void Avancar()
+    {
+        var (restante, total, pausado) = Estado?.Invoke() ?? (0, 1, true);
+        var faltando = total > 0 ? Math.Clamp(restante / total, 0, 1) : 0;
+
+        if (pausado || restante <= 0)
+        {
+            // Parado no meio, respirando devagar.
+            _posicao += (Lampadas / 2f - 0.5f - _posicao) * 0.15f;
+            _brilhoPausa += 0.045f;
+        }
+        else
+        {
+            // 0.18 lampada por quadro parado, ate ~0.75 no fim da contagem.
+            var velocidade = 0.18f + (1f - (float)faltando) * 0.57f;
+            _posicao += velocidade * _sentido;
+            if (_posicao >= Lampadas - 1) { _posicao = Lampadas - 1; _sentido = -1; }
+            else if (_posicao <= 0) { _posicao = 0; _sentido = 1; }
+            _brilhoPausa = 0;
+        }
+
+        Invalidate();
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.Clear(Parent?.BackColor ?? Theme.Painel);
+
+        var (restante, total, pausado) = Estado?.Invoke() ?? (0, 1, true);
+        var escondido = restante <= 0 && !pausado;
+
+        var trilho = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
+        using (var fundo = new SolidBrush(Theme.Fundo)) using (var caminho = Formas.Arredondado(trilho, 8))
+        {
+            g.FillPath(fundo, caminho);
+            using var borda = new Pen(Theme.Borda, 1f);
+            g.DrawPath(borda, caminho);
+        }
+
+        var largura = (Width - Margem * 2) / (float)Lampadas;
+        var altura = Height - Margem * 2;
+        var atenuacao = pausado ? 0.25f : escondido ? 0.55f : 1f;
+        // Respiro do estado parado: some e volta em vez de ficar cravado.
+        if (pausado || escondido) atenuacao *= 0.55f + 0.45f * (float)Math.Abs(Math.Sin(_brilhoPausa));
+
+        for (var i = 0; i < Lampadas; i++)
+        {
+            // Rastro: cai rapido nas duas lampadas vizinhas e some na quarta.
+            var distancia = Math.Abs(i - _posicao);
+            var intensidade = Math.Max(0f, 1f - distancia / 3.4f);
+            intensidade *= intensidade * atenuacao;
+            if (intensidade < 0.02f) continue;
+
+            var cor = Theme.Misturar(Theme.Accent, Color.White, Math.Max(0f, intensidade - 0.72f) * 2.2f);
+            using var lampada = new SolidBrush(Color.FromArgb((int)(255 * intensidade), cor));
+            var r = new RectangleF(Margem + i * largura + 1, Margem, largura - 2, altura);
+            using var forma = Formas.Arredondado(r, 2.5f);
+            g.FillPath(lampada, forma);
+        }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _tique.Dispose();
+        base.Dispose(disposing);
+    }
+}

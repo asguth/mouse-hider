@@ -38,6 +38,7 @@ static class Program
         var primeiraVez = Config.PrimeiraVez;
         _config = Config.Load();
         Idiomas.Definir(_config.Idioma);
+        Config.CorrigirAutoStart();
 
         // Todo caminho de saida restaura o cursor. Este e o requisito critico do app.
         AppDomain.CurrentDomain.ProcessExit += (_, _) => CursorHider.Restore();

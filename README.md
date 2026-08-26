@@ -11,7 +11,9 @@ e o traz de volta no primeiro movimento. Sem conta, sem nuvem, sem telemetria.
 ## O que faz
 
 - Tempo de inatividade configurável, de 1 segundo a 1 hora
+- Contador regressivo ao vivo, que reinicia a cada movimento do mouse
 - Atalho global para pausar e retomar, com a combinação que você escolher
+- Verificação de novas versões direto da tela Sistema
 - Inicia com o Windows, se você quiser (grava só no seu usuário, sem admin)
 - Português, inglês e espanhol, ou segue o idioma do Windows
 - Claro ou escuro, seguindo o tema do sistema
@@ -22,6 +24,21 @@ e o traz de volta no primeiro movimento. Sem conta, sem nuvem, sem telemetria.
 a sessão e ao bloquear a tela. Se o processo morrer de forma feia, uma sentinela em
 `%AppData%\MouseHider\cursor-hidden.flag` denuncia isso na abertura seguinte, e o app
 restaura o cursor antes de qualquer outra coisa.
+
+## Antivírus
+
+O instalador não é assinado com certificado de código, então o SmartScreen avisa "editor
+desconhecido" e motores de heurística podem marcar o arquivo. Na v1.0.0, dois de 67 motores
+do VirusTotal acusaram (`Trojan:Win32/Wacatac.C!ml` e DeepInstinct) — ambos por machine
+learning, nenhum por assinatura de malware conhecido.
+
+A causa era o formato do build: `PublishSingleFile` com compressão gera um auto-extrator,
+e heurística trata auto-extrator como packer. Da v1.0.1 em diante o app é publicado
+self-contained **em pasta**, sem arquivo único: o exe é um apphost comum e as DLLs são .NET
+normais. Quem junta tudo num download só é o instalador.
+
+O que ainda falta para zerar: certificado de assinatura de código. Falsos positivos podem
+ser reportados em <https://www.microsoft.com/en-us/wdsi/filesubmission>.
 
 ## Limitação conhecida
 
