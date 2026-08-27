@@ -9,7 +9,7 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <AssemblyName>MouseHider</AssemblyName>
     <RootNamespace>MouseHider</RootNamespace>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <ApplicationIcon>assets\MouseHider.ico</ApplicationIcon>
     <!-- O publish self-contained arrasta as mensagens do WinForms/WPF em 14 idiomas.
          O app tem tabela de textos propria (Idiomas.cs); isso so inchava o instalador. -->
