@@ -341,52 +341,76 @@ sealed class SettingsForm : Form
         var girando = new Girador { Location = new Point(procurar.Right + 12, 246), Visible = false };
         var estadoBusca = Texto("", procurar.Right + 44, 248, Theme.TextoFraco);
 
-        var temNova = false;
-        procurar.Click += async (_, _) =>
+        // Enquanto trabalha, o texto fica a direita da roda; parado, encostado no botao.
+        void Ocupado(string texto)
         {
-            // Depois de achar versao nova o mesmo botao vira "Baixar".
-            if (temNova) { AbrirNoNavegador(Atualizacao.Pagina); return; }
-
             procurar.Enabled = false;
             girando.Visible = true;
             estadoBusca.Left = procurar.Right + 44;
-            estadoBusca.Text = Idiomas.T("verificando");
+            estadoBusca.Text = texto;
             estadoBusca.ForeColor = Theme.TextoFraco;
+        }
 
-            var (resultado, versao) = await Atualizacao.Verificar(Versao());
-            if (procurar.IsDisposed) return; // usuario pode ter fechado a janela durante a consulta
-
+        void Parado(string texto, Color cor)
+        {
             girando.Visible = false;
             estadoBusca.Left = procurar.Right + 12;
+            estadoBusca.Text = texto;
+            estadoBusca.ForeColor = cor;
+            procurar.Enabled = true;
+        }
 
-            // ForeColor definido em todo ramo: senao o vermelho de um erro fica pendurado
-            // na consulta seguinte, que deu certo.
+        Atualizacao.Novidade? nova = null;
+        procurar.Click += async (_, _) =>
+        {
+            // Depois de achar versao nova o mesmo botao vira "Atualizar agora".
+            if (nova is not null)
+            {
+                // Release sem o instalador anexado: cai para a pagina, como antes.
+                if (nova.Url is null) { AbrirNoNavegador(Atualizacao.Pagina); return; }
+
+                Ocupado(string.Format(Idiomas.T("baixando"), 0));
+                var progresso = new Progress<int>(p => estadoBusca.Text = string.Format(Idiomas.T("baixando"), p));
+                var instalador = await Atualizacao.Baixar(nova, Versao(), progresso);
+                if (procurar.IsDisposed) return;
+
+                if (instalador is not null)
+                {
+                    estadoBusca.Text = Idiomas.T("instalando");
+                    // Daqui o instalador assume: ele fecha este processo e reabre o app.
+                    if (Atualizacao.Instalar(instalador)) { Application.Exit(); return; }
+                }
+
+                Parado(Idiomas.T("falha_baixar"), Vermelho);
+                return;
+            }
+
+            Ocupado(Idiomas.T("verificando"));
+
+            var (resultado, encontrada) = await Atualizacao.Verificar(Versao());
+            if (procurar.IsDisposed) return; // usuario pode ter fechado a janela durante a consulta
+
+            // Cor definida em todo ramo: senao o vermelho de um erro fica pendurado na
+            // consulta seguinte, que deu certo.
             switch (resultado)
             {
                 case Atualizacao.Resultado.TemNova:
-                    temNova = true;
-                    estadoBusca.Text = string.Format(Idiomas.T("nova_versao"), versao);
-                    estadoBusca.ForeColor = Theme.Texto;
+                    nova = encontrada;
                     procurar.Text = Idiomas.T("baixar");
                     procurar.Selecionado = true;
                     procurar.Ajustar();
-                    estadoBusca.Left = procurar.Right + 12;
+                    Parado(string.Format(Idiomas.T("nova_versao"), encontrada!.Versao), Theme.Texto);
                     break;
                 case Atualizacao.Resultado.Atualizado:
-                    estadoBusca.Text = Idiomas.T("atualizado");
-                    estadoBusca.ForeColor = Theme.TextoFraco;
+                    Parado(Idiomas.T("atualizado"), Theme.TextoFraco);
                     break;
                 case Atualizacao.Resultado.SemConexao:
-                    estadoBusca.Text = Idiomas.T("falha_conexao");
-                    estadoBusca.ForeColor = Vermelho;
+                    Parado(Idiomas.T("falha_conexao"), Vermelho);
                     break;
                 default:
-                    estadoBusca.Text = Idiomas.T("falha_verificar");
-                    estadoBusca.ForeColor = Vermelho;
+                    Parado(Idiomas.T("falha_verificar"), Vermelho);
                     break;
             }
-
-            procurar.Enabled = true;
         };
 
         pagina.Controls.Add(procurar);

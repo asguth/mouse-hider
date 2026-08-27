@@ -61,7 +61,10 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExe}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent
+; Sem skipifsilent: na instalacao silenciosa da auto-atualizacao o app precisa
+; voltar sozinho, senao ele so sumiria da bandeja. No modo interativo continua
+; sendo a caixinha "executar agora" do fim do assistente.
+Filename: "{app}\{#MyAppExe}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall
 
 [Code]
 // O autostart e gravado pelo proprio app em HKCU\...\Run. Se ficar para tras depois

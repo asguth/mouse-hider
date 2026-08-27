@@ -90,9 +90,12 @@ static class Idiomas
         ["verificando"] = "verificando...",
         ["atualizado"] = "você já está na versão mais recente",
         ["nova_versao"] = "versão {0} disponível",
-        ["baixar"] = "Baixar",
+        ["baixar"] = "Atualizar agora",
+        ["baixando"] = "baixando {0}%",
+        ["instalando"] = "instalando...",
         ["falha_verificar"] = "não deu para verificar agora",
-        ["falha_conexao"] = "Falha na conexão"
+        ["falha_conexao"] = "Falha na conexão",
+        ["falha_baixar"] = "não deu para baixar a atualização"
     };
 
     static readonly Dictionary<string, string> En = new()
@@ -124,9 +127,12 @@ static class Idiomas
         ["verificando"] = "checking...",
         ["atualizado"] = "you're on the latest version",
         ["nova_versao"] = "version {0} available",
-        ["baixar"] = "Download",
+        ["baixar"] = "Update now",
+        ["baixando"] = "downloading {0}%",
+        ["instalando"] = "installing...",
         ["falha_verificar"] = "couldn't check right now",
-        ["falha_conexao"] = "Connection failed"
+        ["falha_conexao"] = "Connection failed",
+        ["falha_baixar"] = "couldn't download the update"
     };
 
     static readonly Dictionary<string, string> Es = new()
@@ -158,9 +164,12 @@ static class Idiomas
         ["verificando"] = "comprobando...",
         ["atualizado"] = "ya tienes la última versión",
         ["nova_versao"] = "versión {0} disponible",
-        ["baixar"] = "Descargar",
+        ["baixar"] = "Actualizar ahora",
+        ["baixando"] = "descargando {0}%",
+        ["instalando"] = "instalando...",
         ["falha_verificar"] = "no se pudo comprobar ahora",
-        ["falha_conexao"] = "Error de conexión"
+        ["falha_conexao"] = "Error de conexión",
+        ["falha_baixar"] = "no se pudo descargar la actualización"
     };
 
     static readonly Dictionary<string, string> Fr = new()
@@ -192,9 +201,12 @@ static class Idiomas
         ["verificando"] = "vérification...",
         ["atualizado"] = "vous avez déjà la dernière version",
         ["nova_versao"] = "version {0} disponible",
-        ["baixar"] = "Télécharger",
+        ["baixar"] = "Mettre à jour",
+        ["baixando"] = "téléchargement {0}%",
+        ["instalando"] = "installation...",
         ["falha_verificar"] = "impossible de vérifier maintenant",
-        ["falha_conexao"] = "Échec de connexion"
+        ["falha_conexao"] = "Échec de connexion",
+        ["falha_baixar"] = "impossible de télécharger la mise à jour"
     };
 
     static readonly Dictionary<string, string> De = new()
@@ -226,9 +238,12 @@ static class Idiomas
         ["verificando"] = "wird geprüft...",
         ["atualizado"] = "Sie haben die neueste Version",
         ["nova_versao"] = "Version {0} verfügbar",
-        ["baixar"] = "Herunterladen",
+        ["baixar"] = "Jetzt aktualisieren",
+        ["baixando"] = "Download {0}%",
+        ["instalando"] = "wird installiert...",
         ["falha_verificar"] = "Prüfung gerade nicht möglich",
-        ["falha_conexao"] = "Verbindung fehlgeschlagen"
+        ["falha_conexao"] = "Verbindung fehlgeschlagen",
+        ["falha_baixar"] = "Update konnte nicht geladen werden"
     };
 
     static readonly Dictionary<string, string> It = new()
@@ -260,9 +275,12 @@ static class Idiomas
         ["verificando"] = "controllo...",
         ["atualizado"] = "hai già l'ultima versione",
         ["nova_versao"] = "versione {0} disponibile",
-        ["baixar"] = "Scarica",
+        ["baixar"] = "Aggiorna ora",
+        ["baixando"] = "download {0}%",
+        ["instalando"] = "installazione...",
         ["falha_verificar"] = "impossibile controllare ora",
-        ["falha_conexao"] = "Connessione non riuscita"
+        ["falha_conexao"] = "Connessione non riuscita",
+        ["falha_baixar"] = "impossibile scaricare l'aggiornamento"
     };
 
     static readonly Dictionary<string, string> Ru = new()
@@ -294,9 +312,12 @@ static class Idiomas
         ["verificando"] = "проверка...",
         ["atualizado"] = "у вас последняя версия",
         ["nova_versao"] = "доступна версия {0}",
-        ["baixar"] = "Скачать",
+        ["baixar"] = "Обновить",
+        ["baixando"] = "загрузка {0}%",
+        ["instalando"] = "установка...",
         ["falha_verificar"] = "сейчас не удалось проверить",
-        ["falha_conexao"] = "Ошибка соединения"
+        ["falha_conexao"] = "Ошибка соединения",
+        ["falha_baixar"] = "не удалось скачать обновление"
     };
 
     static readonly Dictionary<string, string> Ja = new()
@@ -328,9 +349,12 @@ static class Idiomas
         ["verificando"] = "確認中...",
         ["atualizado"] = "最新バージョンです",
         ["nova_versao"] = "バージョン {0} が利用できます",
-        ["baixar"] = "ダウンロード",
+        ["baixar"] = "今すぐ更新",
+        ["baixando"] = "ダウンロード中 {0}%",
+        ["instalando"] = "インストール中...",
         ["falha_verificar"] = "今は確認できませんでした",
-        ["falha_conexao"] = "接続に失敗しました"
+        ["falha_conexao"] = "接続に失敗しました",
+        ["falha_baixar"] = "更新をダウンロードできませんでした"
     };
 
     static readonly Dictionary<string, string> Zh = new()
@@ -362,9 +386,12 @@ static class Idiomas
         ["verificando"] = "正在检查...",
         ["atualizado"] = "已是最新版本",
         ["nova_versao"] = "有新版本 {0}",
-        ["baixar"] = "下载",
+        ["baixar"] = "立即更新",
+        ["baixando"] = "下载中 {0}%",
+        ["instalando"] = "正在安装...",
         ["falha_verificar"] = "暂时无法检查",
-        ["falha_conexao"] = "连接失败"
+        ["falha_conexao"] = "连接失败",
+        ["falha_baixar"] = "无法下载更新"
     };
 
     static readonly Dictionary<string, string> Ko = new()
@@ -396,8 +423,11 @@ static class Idiomas
         ["verificando"] = "확인 중...",
         ["atualizado"] = "최신 버전입니다",
         ["nova_versao"] = "버전 {0} 사용 가능",
-        ["baixar"] = "다운로드",
+        ["baixar"] = "지금 업데이트",
+        ["baixando"] = "다운로드 중 {0}%",
+        ["instalando"] = "설치 중...",
         ["falha_verificar"] = "지금은 확인할 수 없습니다",
-        ["falha_conexao"] = "연결 실패"
+        ["falha_conexao"] = "연결 실패",
+        ["falha_baixar"] = "업데이트를 내려받지 못했습니다"
     };
 }
