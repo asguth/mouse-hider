@@ -81,12 +81,15 @@ sealed class ChaveLigaDesliga : Control
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Parent?.BackColor ?? Theme.Fundo);
 
-        var r = new RectangleF(1, 1, Width - 2, Height - 2);
+        // Recuo de meia espessura: caneta grossa desenhada rente a borda sai do controle
+        // e o clipping come as pontas do traco. Vale para todos os controles deste arquivo.
+        const float esp = 1.4f;
+        var r = new RectangleF(esp / 2f, esp / 2f, Width - esp, Height - esp);
         using var trilho = Formas.Pilula(r);
 
         using (var fundo = new SolidBrush(Theme.Misturar(Theme.Fundo, Theme.Accent, _pos)))
             g.FillPath(fundo, trilho);
-        using (var borda = new Pen(_pos > 0.5f ? Theme.Accent : Theme.TextoFraco, 1.4f))
+        using (var borda = new Pen(_pos > 0.5f ? Theme.Accent : Theme.TextoFraco, esp))
             g.DrawPath(borda, trilho);
 
         var d = r.Height - 8;
@@ -96,7 +99,7 @@ sealed class ChaveLigaDesliga : Control
 
         if (Focused)
             using (var foco = new Pen(Theme.Texto, 1f) { DashStyle = DashStyle.Dot })
-                g.DrawRectangle(foco, 0, 0, Width - 1, Height - 1);
+                g.DrawRectangle(foco, 0.5f, 0.5f, Width - 1f, Height - 1f);
     }
 
     protected override void Dispose(bool disposing)
@@ -191,25 +194,30 @@ sealed class CampoNumero : Control
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Parent?.BackColor ?? Theme.Painel);
 
-        var r = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
+        var esp = Focused ? 1.6f : 1f;
+        var r = new RectangleF(esp / 2f, esp / 2f, Width - esp, Height - esp);
         using var caixa = Formas.Arredondado(r, 8);
         using (var fundo = new SolidBrush(Theme.Fundo)) g.FillPath(fundo, caixa);
-        using (var borda = new Pen(Focused ? Theme.Accent : Theme.Borda, Focused ? 1.6f : 1f)) g.DrawPath(borda, caixa);
+        using (var borda = new Pen(Focused ? Theme.Accent : Theme.Borda, esp)) g.DrawPath(borda, caixa);
 
         var texto = Sufixo.Length > 0 ? _valor + " " + Sufixo : _valor.ToString();
         TextRenderer.DrawText(g, texto, Font, new Rectangle(12, 0, Width - LarguraBotao * 2 - 12, Height),
             Theme.Texto, TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
 
-        DesenhaBotao(g, Width - LarguraBotao * 2, -1);
-        DesenhaBotao(g, Width - LarguraBotao, 1);
+        DesenhaBotao(g, caixa, Width - LarguraBotao * 2, -1);
+        DesenhaBotao(g, caixa, Width - LarguraBotao, 1);
     }
 
-    void DesenhaBotao(Graphics g, int x, int sinal)
+    void DesenhaBotao(Graphics g, GraphicsPath caixa, int x, int sinal)
     {
         var area = new Rectangle(x, 1, LarguraBotao, Height - 2);
+        // Recorta na caixa: o realce e quadrado e vazaria pelo canto arredondado da direita.
         if (_zonaSobre == sinal)
-            using (var realce = new SolidBrush(Theme.Hover))
-                g.FillRectangle(realce, area);
+        {
+            g.SetClip(caixa);
+            using (var realce = new SolidBrush(Theme.Hover)) g.FillRectangle(realce, area);
+            g.ResetClip();
+        }
 
         var habilitado = sinal > 0 ? _valor < Maximo : _valor > Minimo;
         using var caneta = new Pen(habilitado ? Theme.Texto : Theme.TextoFraco, 1.6f);
@@ -263,13 +271,18 @@ sealed class BotaoChip : Control
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Parent?.BackColor ?? Theme.Painel);
 
-        var r = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
+        var esp = Focused ? 1.6f : 1f;
+        var r = new RectangleF(esp / 2f, esp / 2f, Width - esp, Height - esp);
         using var pilula = Formas.Pilula(r);
 
-        var fundo = Selecionado ? Theme.Accent : _sobre ? Theme.Hover : Theme.Fundo;
+        // Selecionado tambem responde ao hover: o "Buy me a coffee" e um chip selecionado
+        // e sem isto o botao de acao mais visivel da tela nao reage ao mouse.
+        var fundo = Selecionado
+            ? _sobre ? Theme.Misturar(Theme.Accent, Color.White, 0.16f) : Theme.Accent
+            : _sobre ? Theme.Hover : Theme.Fundo;
         using (var pincel = new SolidBrush(fundo)) g.FillPath(pincel, pilula);
         if (!Selecionado)
-            using (var borda = new Pen(Focused ? Theme.Accent : Theme.Borda, Focused ? 1.6f : 1f))
+            using (var borda = new Pen(Focused ? Theme.Accent : Theme.Borda, esp))
                 g.DrawPath(borda, pilula);
 
         TextRenderer.DrawText(g, Text, Font, new Rectangle(0, 0, Width, Height),
@@ -291,13 +304,28 @@ sealed class CapturaAtalho : Control
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
                  ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
         TabStop = true;
-        Size = new Size(190, 36);
+        Height = 36;
         Cursor = Cursors.Hand;
+        Ajustar();
     }
+
+    /// <summary>
+    /// Largura pelo maior dos dois textos que a caixa mostra. Com 190 px fixos a dica
+    /// nao cabia nem em portugues â em alemao seria pior.
+    /// </summary>
+    public void Ajustar()
+    {
+        var dica = TextRenderer.MeasureText(Idiomas.T("atalho_dica"), Font).Width;
+        var atalho = TextRenderer.MeasureText(Atalho, Font).Width;
+        Width = Math.Max(190, Math.Max(dica, atalho) + 32);
+    }
+
+    protected override void OnFontChanged(EventArgs e) { base.OnFontChanged(e); Ajustar(); }
 
     public void DefinirSemAvisar(string atalho)
     {
         if (!string.IsNullOrWhiteSpace(atalho)) Atalho = atalho;
+        Ajustar();
         Invalidate();
     }
 
@@ -321,6 +349,7 @@ sealed class CapturaAtalho : Control
 
         Atalho = texto;
         _capturando = false;
+        Ajustar();
         Invalidate();
         AtalhoAlterado?.Invoke(this, EventArgs.Empty);
         return true;
@@ -332,10 +361,11 @@ sealed class CapturaAtalho : Control
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Parent?.BackColor ?? Theme.Painel);
 
-        var r = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
+        var esp = _capturando ? 1.8f : Focused ? 1.6f : 1f;
+        var r = new RectangleF(esp / 2f, esp / 2f, Width - esp, Height - esp);
         using var caixa = Formas.Arredondado(r, 8);
         using (var fundo = new SolidBrush(Theme.Fundo)) g.FillPath(fundo, caixa);
-        using (var borda = new Pen(_capturando || Focused ? Theme.Accent : Theme.Borda, _capturando ? 1.8f : 1f))
+        using (var borda = new Pen(_capturando || Focused ? Theme.Accent : Theme.Borda, esp))
             g.DrawPath(borda, caixa);
 
         TextRenderer.DrawText(g, _capturando ? Idiomas.T("atalho_dica") : Atalho, Font,
@@ -424,11 +454,13 @@ sealed class ContadorKitt : Control
     }
 
     // So anima com a janela na frente: o app passa 99% do tempo escondido na bandeja.
-    protected override void OnVisibleChanged(EventArgs e)
-    {
-        base.OnVisibleChanged(e);
-        if (Visible) _tique.Start(); else _tique.Stop();
-    }
+    // OnHandleCreated tambem, e nao so VisibleChanged: ao trocar de aba o controle nasce
+    // dentro de um pai ja visivel, nao ha transicao de visibilidade, o evento nunca
+    // dispara e a varredura ficava parada ate reabrir a janela.
+    protected override void OnVisibleChanged(EventArgs e) { base.OnVisibleChanged(e); SincronizarTimer(); }
+    protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); SincronizarTimer(); }
+
+    void SincronizarTimer() => _tique.Enabled = Visible;
 
     void Avancar()
     {
@@ -496,6 +528,148 @@ sealed class ContadorKitt : Control
     protected override void Dispose(bool disposing)
     {
         if (disposing) _tique.Dispose();
+        base.Dispose(disposing);
+    }
+}
+
+/// <summary>Roda de carregamento: arco girando sobre um anel fraco.</summary>
+sealed class Girador : Control
+{
+    readonly System.Windows.Forms.Timer _tique = new() { Interval = 33 }; // ~30 fps
+    float _angulo;
+
+    public Girador()
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
+                 ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+        Size = new Size(20, 20);
+        _tique.Tick += (_, _) => { _angulo = (_angulo + 11f) % 360f; Invalidate(); };
+    }
+
+    // Mesmo cuidado do ContadorKitt: OnHandleCreated cobre o controle criado dentro de um
+    // pai que ja estava visivel, caso em que VisibleChanged nunca dispara.
+    protected override void OnVisibleChanged(EventArgs e) { base.OnVisibleChanged(e); SincronizarTimer(); }
+    protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); SincronizarTimer(); }
+
+    void SincronizarTimer() => _tique.Enabled = Visible;
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.Clear(Parent?.BackColor ?? Theme.Painel);
+
+        const float esp = 2.4f;
+        var r = new RectangleF(esp / 2f, esp / 2f, Width - esp, Height - esp);
+        using (var anel = new Pen(Theme.Borda, esp)) g.DrawEllipse(anel, r);
+        using var arco = new Pen(Theme.Accent, esp) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        g.DrawArc(arco, r, _angulo, 100f);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _tique.Dispose();
+        base.Dispose(disposing);
+    }
+}
+
+/// <summary>
+/// Dropdown no tema do app. ponytail: a lista aberta e um ContextMenuStrip com o
+/// Theme.MenuRenderer que ja existe para o menu da bandeja — o ComboBox do WinForms nao
+/// aceita tema (borda e seta continuam claras no modo escuro) e um popup proprio seria
+/// mais uma janela sem foco para gerenciar.
+/// </summary>
+sealed class ListaSuspensa : Control
+{
+    readonly ContextMenuStrip _menu;
+    readonly (string Valor, string Rotulo)[] _itens;
+    bool _sobre;
+
+    public string Selecionado { get; private set; }
+    public event EventHandler? SelecaoAlterada;
+
+    public ListaSuspensa((string Valor, string Rotulo)[] itens, string selecionado)
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer |
+                 ControlStyles.UserPaint | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+        TabStop = true;
+        _itens = itens;
+        Selecionado = selecionado;
+        Size = new Size(220, 36);
+        Cursor = Cursors.Hand;
+
+        // ShowCheckMargin sem ShowImageMargin: sobra so a coluna do tique, sem a faixa
+        // larga de icones que o ToolStrip desenha por padrao.
+        _menu = new ContextMenuStrip
+        {
+            Renderer = new Theme.MenuRenderer(),
+            BackColor = Theme.Painel,
+            ForeColor = Theme.Texto,
+            ShowImageMargin = false,
+            ShowCheckMargin = true
+        };
+        foreach (var (valor, rotulo) in itens)
+        {
+            var item = new ToolStripMenuItem(rotulo) { Tag = valor };
+            item.Click += (_, _) => Escolher(valor);
+            _menu.Items.Add(item);
+        }
+    }
+
+    void Escolher(string valor)
+    {
+        if (valor == Selecionado) return;
+        Selecionado = valor;
+        Invalidate();
+        SelecaoAlterada?.Invoke(this, EventArgs.Empty);
+    }
+
+    string RotuloAtual() => _itens.FirstOrDefault(i => i.Valor == Selecionado).Rotulo ?? "";
+
+    protected override void OnMouseEnter(EventArgs e) { _sobre = true; Invalidate(); base.OnMouseEnter(e); }
+    protected override void OnMouseLeave(EventArgs e) { _sobre = false; Invalidate(); base.OnMouseLeave(e); }
+    protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
+    protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+    protected override void OnClick(EventArgs e) { Focus(); Abrir(); base.OnClick(e); }
+    protected override bool IsInputKey(Keys k) => k is Keys.Down || base.IsInputKey(k);
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.KeyCode is Keys.Space or Keys.Enter or Keys.Down) { Abrir(); e.Handled = true; }
+        base.OnKeyDown(e);
+    }
+
+    void Abrir()
+    {
+        _menu.Font = Font;
+        foreach (ToolStripMenuItem item in _menu.Items) item.Checked = (string)item.Tag! == Selecionado;
+        _menu.Show(this, new Point(0, Height + 2));
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.Clear(Parent?.BackColor ?? Theme.Painel);
+
+        var esp = Focused ? 1.6f : 1f;
+        var r = new RectangleF(esp / 2f, esp / 2f, Width - esp, Height - esp);
+        using var caixa = Formas.Arredondado(r, 8);
+        using (var fundo = new SolidBrush(_sobre ? Theme.Hover : Theme.Fundo)) g.FillPath(fundo, caixa);
+        using (var borda = new Pen(Focused ? Theme.Accent : Theme.Borda, esp)) g.DrawPath(borda, caixa);
+
+        TextRenderer.DrawText(g, RotuloAtual(), Font, new Rectangle(12, 0, Width - 42, Height),
+            Theme.Texto, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
+
+        using var seta = new Pen(Theme.TextoFraco, 1.6f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        var cx = Width - 18f;
+        var cy = Height / 2f - 1f;
+        g.DrawLines(seta, new[] { new PointF(cx - 4, cy), new PointF(cx, cy + 4), new PointF(cx + 4, cy) });
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _menu.Dispose();
         base.Dispose(disposing);
     }
 }
