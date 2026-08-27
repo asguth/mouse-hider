@@ -4,6 +4,13 @@ namespace MouseHider;
 
 sealed class SettingsForm : Form
 {
+    // Largura util de uma pagina. A janela e dimensionada a partir daqui: antes o trilho
+    // e o padding comiam 232 px de uma janela de 640 e os elementos de 420 px saiam cortados.
+    const int LarguraTrilho = 176;
+    const int LarguraConteudo = 420;
+
+    static readonly Color Vermelho = Color.FromArgb(0xE0, 0x6C, 0x75);
+
     readonly Config _config;
     Panel _conteudo = null!;
     readonly List<Button> _navegacao = new();
@@ -22,7 +29,7 @@ sealed class SettingsForm : Form
         MaximizeBox = false;
         MinimizeBox = true;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(640, 400);
+        ClientSize = new Size(LarguraTrilho + 28 + LarguraConteudo + 28, 420);
         Font = Theme.Fonte();
         Icon = Logo.Criar(32);
 
@@ -33,7 +40,11 @@ sealed class SettingsForm : Form
     void ConstruirUi()
     {
         SuspendLayout();
+        // Clear() nao descarta: sem isto cada troca de idioma deixava um trilho e uma
+        // pagina inteiros vivos, com os timers das animacoes rodando.
+        var antigos = Controls.Cast<Control>().ToArray();
         Controls.Clear();
+        foreach (var c in antigos) c.Dispose();
         _navegacao.Clear();
         _presets.Clear();
 
@@ -71,6 +82,16 @@ sealed class SettingsForm : Form
         base.WndProc(ref m);
     }
 
+    /// <summary>
+    /// O X encerra o app de vez â e o minimizar (acima) que manda para a bandeja. Sem isto
+    /// fechar a janela so a escondia e o unico jeito de sair era pelo menu da bandeja.
+    /// </summary>
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        base.OnFormClosing(e);
+        if (e.CloseReason == CloseReason.UserClosing) Application.Exit();
+    }
+
     /// <summary>Rede de seguranca para quem minimiza por fora (Win+M, "mostrar area de trabalho").</summary>
     protected override void OnResize(EventArgs e)
     {
@@ -84,7 +105,7 @@ sealed class SettingsForm : Form
 
     Panel Trilho()
     {
-        var trilho = new Panel { Dock = DockStyle.Left, Width = 176, BackColor = Theme.Fundo, Padding = new Padding(10) };
+        var trilho = new Panel { Dock = DockStyle.Left, Width = LarguraTrilho, BackColor = Theme.Fundo, Padding = new Padding(10) };
 
         trilho.Controls.Add(new PictureBox
         {
@@ -137,6 +158,9 @@ sealed class SettingsForm : Form
         return trilho;
     }
 
+    /// <summary>Ponto de entrada do menu da bandeja: abre a janela ja na aba pedida.</summary>
+    public void AbrirPagina(int indice) => Abrir(indice);
+
     void Abrir(int indice)
     {
         _pagina = indice;
@@ -147,7 +171,12 @@ sealed class SettingsForm : Form
             _navegacao[i].Invalidate();
         }
 
+        // Descartar a pagina anterior: Clear() sozinho deixava para tras um ContadorKitt com
+        // timer vivo a cada troca de aba, alem de encher _presets de chips mortos.
+        var anterior = _conteudo.Controls.Count > 0 ? _conteudo.Controls[0] : null;
         _conteudo.Controls.Clear();
+        anterior?.Dispose();
+
         _conteudo.Controls.Add(indice switch
         {
             0 => PaginaGeral(),
@@ -161,6 +190,7 @@ sealed class SettingsForm : Form
     Control PaginaGeral()
     {
         var pagina = NovaPagina(Idiomas.T("geral"));
+        _presets.Clear(); // a pagina e remontada a cada visita; os chips antigos ja foram descartados
 
         pagina.Controls.Add(Texto(Idiomas.T("esconder_apos"), 0, 52, Theme.Texto, Theme.Fonte(10f)));
 
@@ -187,7 +217,7 @@ sealed class SettingsForm : Form
         var atalhos = new FlowLayoutPanel
         {
             Location = new Point(0, 126),
-            MaximumSize = new Size(420, 0),
+            MaximumSize = new Size(LarguraConteudo, 0),
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             BackColor = Theme.Painel,
@@ -212,11 +242,13 @@ sealed class SettingsForm : Form
         var y = atalhos.Top + atalhos.PreferredSize.Height + 22;
 
         var rotuloContador = Texto("", 0, y, Theme.TextoFraco);
-        var kitt = new ContadorKitt { Location = new Point(0, y + 22), Width = 420 };
+        var kitt = new ContadorKitt { Location = new Point(0, y + 22), Width = LarguraConteudo };
         kitt.Estado = () =>
         {
             var total = _config.IdleSeconds * 1000.0;
-            var restante = Math.Max(0, total - Native.IdleMilliseconds());
+            // Escondido pelo atalho nao zera o contador de ociosidade â vale perguntar ao
+            // CursorHider, senao a barra segue em contagem regressiva com o cursor ja invisivel.
+            var restante = CursorHider.IsHidden ? 0 : Math.Max(0, total - Native.IdleMilliseconds());
             rotuloContador.Text = _config.Paused
                 ? Idiomas.T("contador_pausado")
                 : restante <= 0
@@ -231,8 +263,9 @@ sealed class SettingsForm : Form
         pagina.Controls.Add(Texto(Idiomas.T("atalho"), 0, y, Theme.Texto, Theme.Fonte(10f)));
 
         var captura = new CapturaAtalho { Location = new Point(0, y + 26), Font = Theme.Fonte(10f) };
-        captura.DefinirSemAvisar(_config.Hotkey);
-        _avisoAtalho = Texto(Idiomas.T("atalho_ocupado"), 200, y + 36, Color.FromArgb(0xE0, 0x6C, 0x75));
+        captura.DefinirSemAvisar(_config.Hotkey); // ja reajusta a largura da caixa ao texto
+        // Abaixo da caixa, nao ao lado: o texto do aviso e longo e passava da largura da pagina.
+        _avisoAtalho = Texto(Idiomas.T("atalho_ocupado"), 0, y + 70, Vermelho);
         _avisoAtalho.Visible = false;
 
         captura.AtalhoAlterado += (_, _) =>
@@ -284,32 +317,29 @@ sealed class SettingsForm : Form
 
         pagina.Controls.Add(Texto(Idiomas.T("idioma"), 0, 124, Theme.Texto, Theme.Fonte(10f)));
 
-        var idiomas = new FlowLayoutPanel
+        // Onze idiomas nao cabem em chips numa linha; dropdown proprio porque o ComboBox do
+        // WinForms nao aceita tema â borda e seta continuam claras no modo escuro.
+        var lista = new ListaSuspensa(
+            Idiomas.Disponiveis.Select(d => (Valor: d.Codigo, Rotulo: Idiomas.NomeDe(d.Codigo, d.Nome))).ToArray(),
+            Idiomas.Codigo)
         {
             Location = new Point(0, 150),
-            Size = new Size(420, 44),
-            BackColor = Theme.Painel,
-            WrapContents = true
+            Font = Theme.Fonte(10f)
         };
-        foreach (var (codigo, nome) in Idiomas.Disponiveis)
+        // BeginInvoke: TrocarIdioma remonta a janela inteira, e descartar a ListaSuspensa de
+        // dentro do Click do proprio item do menu derrubaria o ToolStrip que ainda esta fechando.
+        lista.SelecaoAlterada += (_, _) =>
         {
-            var rotulo = codigo == "auto" ? nome + " (" + Idiomas.DoWindows().ToUpperInvariant() + ")" : nome;
-            var chip = new BotaoChip(rotulo)
-            {
-                Font = Theme.Fonte(),
-                Selecionado = Idiomas.Codigo == codigo,
-                Margin = new Padding(0, 0, 7, 7)
-            };
-            chip.Ajustar();
-            chip.Click += (_, _) => TrocarIdioma(codigo);
-            idiomas.Controls.Add(chip);
-        }
-        pagina.Controls.Add(idiomas);
-        pagina.Controls.Add(Texto(Idiomas.T("idioma_obs"), 0, 200, Theme.TextoFraco));
+            var novo = lista.Selecionado;
+            BeginInvoke(() => TrocarIdioma(novo));
+        };
+        pagina.Controls.Add(lista);
+        pagina.Controls.Add(Texto(Idiomas.T("idioma_obs"), 0, 196, Theme.TextoFraco));
 
-        var procurar = new BotaoChip(Idiomas.T("buscar_atualizacao")) { Font = Theme.Fonte(), Location = new Point(0, 244) };
+        var procurar = new BotaoChip(Idiomas.T("buscar_atualizacao")) { Font = Theme.Fonte(), Location = new Point(0, 240) };
         procurar.Ajustar();
-        var estadoBusca = Texto("", procurar.Right + 12, 252, Theme.TextoFraco);
+        var girando = new Girador { Location = new Point(procurar.Right + 12, 246), Visible = false };
+        var estadoBusca = Texto("", procurar.Right + 44, 248, Theme.TextoFraco);
 
         var temNova = false;
         procurar.Click += async (_, _) =>
@@ -318,12 +348,19 @@ sealed class SettingsForm : Form
             if (temNova) { AbrirNoNavegador(Atualizacao.Pagina); return; }
 
             procurar.Enabled = false;
+            girando.Visible = true;
+            estadoBusca.Left = procurar.Right + 44;
             estadoBusca.Text = Idiomas.T("verificando");
             estadoBusca.ForeColor = Theme.TextoFraco;
 
             var (resultado, versao) = await Atualizacao.Verificar(Versao());
             if (procurar.IsDisposed) return; // usuario pode ter fechado a janela durante a consulta
 
+            girando.Visible = false;
+            estadoBusca.Left = procurar.Right + 12;
+
+            // ForeColor definido em todo ramo: senao o vermelho de um erro fica pendurado
+            // na consulta seguinte, que deu certo.
             switch (resultado)
             {
                 case Atualizacao.Resultado.TemNova:
@@ -337,9 +374,15 @@ sealed class SettingsForm : Form
                     break;
                 case Atualizacao.Resultado.Atualizado:
                     estadoBusca.Text = Idiomas.T("atualizado");
+                    estadoBusca.ForeColor = Theme.TextoFraco;
+                    break;
+                case Atualizacao.Resultado.SemConexao:
+                    estadoBusca.Text = Idiomas.T("falha_conexao");
+                    estadoBusca.ForeColor = Vermelho;
                     break;
                 default:
                     estadoBusca.Text = Idiomas.T("falha_verificar");
+                    estadoBusca.ForeColor = Vermelho;
                     break;
             }
 
@@ -347,6 +390,7 @@ sealed class SettingsForm : Form
         };
 
         pagina.Controls.Add(procurar);
+        pagina.Controls.Add(girando);
         pagina.Controls.Add(estadoBusca);
 
         return pagina;

@@ -9,7 +9,9 @@ static class Program
     static Config _config = null!;
     static NotifyIcon _tray = null!;
     static ToolStripMenuItem _pauseItem = null!;
-    static ToolStripMenuItem _configItem = null!;
+    static ToolStripMenuItem _geralItem = null!;
+    static ToolStripMenuItem _sistemaItem = null!;
+    static ToolStripMenuItem _sobreItem = null!;
     static ToolStripMenuItem _sairItem = null!;
     static SettingsForm? _settings;
     static HotkeyWindow? _hotkey;
@@ -59,8 +61,11 @@ static class Program
         // Claro/escuro pode mudar com o app aberto; o menu le a paleta na hora de pintar.
         SystemEvents.UserPreferenceChanged += (_, _) => Theme.Reavaliar();
 
+        // O menu da bandeja espelha as abas da janela: clicar leva direto na aba certa.
+        _geralItem = new ToolStripMenuItem("", null, (_, _) => ShowSettings(0));
+        _sistemaItem = new ToolStripMenuItem("", null, (_, _) => ShowSettings(1));
+        _sobreItem = new ToolStripMenuItem("", null, (_, _) => ShowSettings(2));
         _pauseItem = new ToolStripMenuItem("", null, (_, _) => TogglePause()) { Checked = _config.Paused };
-        _configItem = new ToolStripMenuItem("", null, (_, _) => ShowSettings());
         _sairItem = new ToolStripMenuItem("", null, (_, _) => Application.Exit());
         var menu = new ContextMenuStrip
         {
@@ -70,7 +75,10 @@ static class Program
             ForeColor = Theme.Texto,
             ShowImageMargin = false
         };
-        menu.Items.Add(_configItem);
+        menu.Items.Add(_geralItem);
+        menu.Items.Add(_sistemaItem);
+        menu.Items.Add(_sobreItem);
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_pauseItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_sairItem);
@@ -85,14 +93,16 @@ static class Program
         _tray.DoubleClick += (_, _) => ShowSettings();
         AtualizarTextos();
 
-        var timer = new System.Windows.Forms.Timer { Interval = 500 };
+        // 50 ms: este intervalo e a latencia com que o cursor volta ao primeiro movimento.
+        // Com 500 ms a demora era visivel. O tique e so um GetLastInputInfo.
+        var timer = new System.Windows.Forms.Timer { Interval = 50 };
         timer.Tick += (_, _) => Tick();
         timer.Start();
 
         // Primeira execucao abre a janela: sem isso o app some na bandeja e parece que nao instalou.
         if (primeiraVez) ShowSettings();
 
-        _hotkey = new HotkeyWindow(() => TogglePause(viaAtalho: true));
+        _hotkey = new HotkeyWindow(EsconderAgora);
         AplicarAtalho(_config.Hotkey);
 
         Config.Log("iniciado (idle=" + _config.IdleSeconds + "s, pausado=" + _config.Paused +
@@ -117,42 +127,74 @@ static class Program
     /// <summary>Reaplica os textos do menu apos troca de idioma.</summary>
     public static void AtualizarTextos()
     {
-        _configItem.Text = Idiomas.T("menu_config");
+        _geralItem.Text = Idiomas.T("geral");
+        _sistemaItem.Text = Idiomas.T("sistema");
+        _sobreItem.Text = Idiomas.T("sobre");
         _pauseItem.Text = Idiomas.T("menu_pausar");
         _sairItem.Text = Idiomas.T("menu_sair");
         _tray.Text = TextoDaBandeja();
     }
 
-    static void Tick()
+    /// <summary>
+    /// Folga apos o atalho antes de aceitar entrada como "o usuario mexeu". Soltar as teclas
+    /// do proprio atalho conta como entrada para o GetLastInputInfo; sem esta folga o cursor
+    /// reaparecia no mesmo instante em que sumiu.
+    /// </summary>
+    const uint GracaManual = 500;
+
+    static bool _manual;
+    static uint _manualDesde;
+
+    /// <summary>Atalho global: esconde na hora, sem esperar a contagem.</summary>
+    static void EsconderAgora()
     {
-        var limiar = (uint)_config.IdleSeconds * 1000u;
-        if (!_config.Paused && Native.IdleMilliseconds() >= limiar) CursorHider.Hide();
-        else CursorHider.Restore();
+        if (_config.Paused) return;
+        _manual = true;
+        _manualDesde = unchecked((uint)Environment.TickCount);
+        CursorHider.Hide();
+        Config.Log("escondido pelo atalho");
     }
 
-    static void TogglePause(bool viaAtalho = false)
+    /// <summary>
+    /// Houve entrada depois da marca (passada a folga)? Entao o esconder manual acabou.
+    /// A ultima entrada e "agora - ocioso"; a subtracao unchecked cobre o wraparound, e o
+    /// teto de int.MaxValue descarta o caso de entrada anterior a marca, que da negativo.
+    /// </summary>
+    public static bool ManualExpirou(uint agora, uint ocioso, uint marca) =>
+        unchecked(agora - ocioso - marca) is > GracaManual and < int.MaxValue;
+
+    static void Tick()
+    {
+        var agora = unchecked((uint)Environment.TickCount);
+        var ocioso = Native.IdleMilliseconds();
+
+        if (_manual && ManualExpirou(agora, ocioso, _manualDesde)) _manual = false;
+
+        if (!_config.Paused && (_manual || ocioso >= (uint)_config.IdleSeconds * 1000u)) CursorHider.Hide();
+        // So chama Restore quando ha o que restaurar: ele consulta a sentinela em disco, e a
+        // 50 ms isso viraria File.Exists vinte vezes por segundo.
+        else if (CursorHider.IsHidden) CursorHider.Restore();
+    }
+
+    static void TogglePause()
     {
         _config.Paused = !_config.Paused;
+        _manual = false;
         _pauseItem.Checked = _config.Paused;
         _tray.Icon = Logo.Tray(_config.Paused); // pausado = logo em cinza
         _tray.Text = TextoDaBandeja();
         if (_config.Paused) CursorHider.Restore();
         _config.Save();
         Config.Log(_config.Paused ? "pausado" : "retomado");
-
-        // Pelo menu da bandeja o proprio check ja da o retorno; pelo atalho global nao ha nada
-        // na tela, entao um balao e a unica forma do usuario saber que funcionou.
-        if (viaAtalho)
-            _tray.ShowBalloonTip(1200, "Mouse Hider",
-                Idiomas.T(_config.Paused ? "pausado" : "ativo"), ToolTipIcon.None);
     }
 
     static string TextoDaBandeja() =>
         _config.Paused ? "Mouse Hider — " + Idiomas.T("pausado") : "Mouse Hider";
 
-    static void ShowSettings()
+    static void ShowSettings(int pagina = 0)
     {
         if (_settings is null || _settings.IsDisposed) _settings = new SettingsForm(_config);
+        _settings.AbrirPagina(pagina);
         // Estado antes do Show(): se a janela tinha sido minimizada por fora, nao pisca restaurando.
         _settings.WindowState = FormWindowState.Normal;
         _settings.Show();
@@ -249,6 +291,13 @@ static class SelfTest
             Check(Native.IdleFrom(5000, 1000) == 4000, "idle simples");
             Check(Native.IdleFrom(unchecked((uint)int.MinValue), unchecked((uint)int.MaxValue)) == 1,
                   "wraparound do TickCount");
+
+            // Esconder pelo atalho: sobrevive a soltura das proprias teclas, acaba no
+            // movimento seguinte, e nao expira por entrada anterior a marca (wraparound).
+            Check(!Program.ManualExpirou(10_600, 500, 10_000), "manual sobrevive a soltura das teclas");
+            Check(Program.ManualExpirou(13_000, 100, 10_000), "manual acaba no movimento seguinte");
+            Check(!Program.ManualExpirou(unchecked((uint)int.MinValue), 100, unchecked((uint)int.MaxValue)),
+                  "manual no wraparound do TickCount");
 
             CursorHider.Hide();
             Check(CursorHider.IsHidden, "estado escondido apos Hide");

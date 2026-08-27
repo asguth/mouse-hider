@@ -12,7 +12,7 @@ static class Atualizacao
     const string Api = "https://api.github.com/repos/asguth/mouse-hider/releases/latest";
     public const string Pagina = "https://github.com/asguth/mouse-hider/releases/latest";
 
-    public enum Resultado { Atualizado, TemNova, Falhou }
+    public enum Resultado { Atualizado, TemNova, SemConexao, Falhou }
 
     public static async Task<(Resultado Estado, string Versao)> Verificar(string versaoAtual)
     {
@@ -33,6 +33,13 @@ static class Atualizacao
             }
 
             return (remota > local ? Resultado.TemNova : Resultado.Atualizado, limpa);
+        }
+        // Sem rede e uma coisa (aviso vermelho "Falha na conexao"); resposta estranha do
+        // GitHub e outra. O timeout do HttpClient chega como TaskCanceledException.
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            Config.Log("sem conexao ao verificar atualizacao: " + e.Message);
+            return (Resultado.SemConexao, "");
         }
         catch (Exception e)
         {
