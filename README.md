@@ -12,10 +12,11 @@ e o traz de volta no primeiro movimento. Sem conta, sem nuvem, sem telemetria.
 
 - Tempo de inatividade configurável, de 1 segundo a 1 hora
 - Contador regressivo ao vivo, que reinicia a cada movimento do mouse
-- Atalho global para pausar e retomar, com a combinação que você escolher
+- Atalho global para esconder o cursor na hora, com a combinação que você escolher
+- Pausar e retomar pelo menu da bandeja, que espelha as abas da janela
 - Verificação de novas versões direto da tela Sistema
 - Inicia com o Windows, se você quiser (grava só no seu usuário, sem admin)
-- Português, inglês e espanhol, ou segue o idioma do Windows
+- 11 idiomas, ou segue o idioma do Windows
 - Claro ou escuro, seguindo o tema do sistema
 
 ## O cursor sempre volta
@@ -50,14 +51,20 @@ sistema. Isso é comportamento do Windows, não falha do app.
 | Arquivo | Responsabilidade |
 |---|---|
 | [`CursorHider.cs`](MouseHider/CursorHider.cs) | Troca os cursores do sistema por um transparente (`CreateCursor` + `SetSystemCursor`) e restaura com `SystemParametersInfo(SPI_SETCURSORS)` |
-| [`Program.cs`](MouseHider/Program.cs) | Mutex de instância única, timer de 500 ms com `GetLastInputInfo`, bandeja, atalho global |
+| [`Program.cs`](MouseHider/Program.cs) | Mutex de instância única, timer de 50 ms com `GetLastInputInfo`, bandeja, atalho global |
 | [`Config.cs`](MouseHider/Config.cs) | `%AppData%\MouseHider\config.json`, autostart em `HKCU\...\Run`, log com rotação |
 | [`Logo.cs`](MouseHider/Logo.cs) | O logo desenhado por código e o gerador do `.ico` multi-resolução |
-| [`Theme.cs`](MouseHider/Theme.cs), [`Controles.cs`](MouseHider/Controles.cs) | Paleta clara/escura e os controles próprios (toggle, campo numérico, chips, captura de atalho) |
-| [`Idiomas.cs`](MouseHider/Idiomas.cs) | Tabela de textos pt/en/es |
+| [`Theme.cs`](MouseHider/Theme.cs), [`Controles.cs`](MouseHider/Controles.cs) | Paleta clara/escura e os controles próprios (toggle, campo numérico, chips, captura de atalho, dropdown, contador KITT, roda de carregamento) |
+| [`Idiomas.cs`](MouseHider/Idiomas.cs) | Tabela de textos em 11 idiomas |
 
 Detecção de inatividade é por `GetLastInputInfo` com polling, não por hook global de mouse:
-mais leve e sem o falso-positivo de keylogger em antivírus.
+mais leve e sem o falso-positivo de keylogger em antivírus. O intervalo do timer é a
+latência com que o cursor volta ao primeiro movimento — daí os 50 ms.
+
+Os controles da janela são desenhados à mão em vez de usar os do WinForms, que não aceitam
+tema: o `NumericUpDown` mantém as setinhas claras no modo escuro e o `ComboBox` mantém a
+borda e a seta do sistema. A lista aberta do dropdown de idiomas é um `ContextMenuStrip`
+com o mesmo renderer temático do menu da bandeja.
 
 ## Compilar
 
@@ -81,11 +88,16 @@ dotnet run --project MouseHider\MouseHider.csproj -- --makeicon
 ## Publicar uma versão
 
 ```powershell
-.\scripts\release.ps1 1.0.1
+.\scripts\release.ps1 1.0.2
 ```
 
 Publica o exe, compila o instalador, commita, cria a tag e sobe o release. O asset sai
 sempre com o nome `MouseHiderSetup.exe`, então o link de download acima nunca muda.
+
+A versão fica só no `MouseHider.csproj`, e o script grava ela lá — a tela Sobre e o
+instalador leem daí. A verificação de atualização compara com a tag do release mais
+recente no GitHub, então versão nova só aparece para quem já instalou depois que o
+release existe.
 
 ## Apoiar
 
