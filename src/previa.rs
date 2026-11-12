@@ -77,7 +77,7 @@ pub fn rodar(args: &[String]) {
     };
 
     let estado = Arc::new(Estado::new(config));
-    estado.pedir_janela(aba);
+    estado.pedir_janela(Some(aba));
     let opcoes = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Mouse Hider")

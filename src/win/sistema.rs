@@ -92,8 +92,9 @@ pub fn executar(caminho: &std::path::Path, argumentos: &str) -> bool {
 const RUN: &str = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 const VALOR: &str = "MouseHider";
 
-fn exe_entre_aspas() -> Option<String> {
-    std::env::current_exe().ok().map(|p| format!("\"{}\"", p.display()))
+/// Comando gravado no Run. `--bandeja` = aberto pelo login: comeca so no icone.
+fn comando() -> Option<String> {
+    std::env::current_exe().ok().map(|p| format!("\"{}\" {}", p.display(), super::ARG_BANDEJA))
 }
 
 fn abrir_run(acesso: u32) -> Option<HKEY> {
@@ -143,19 +144,13 @@ pub fn autostart() -> bool {
 }
 
 pub fn definir_autostart(ligado: bool) {
-    if ligado {
-        if let Some(exe) = exe_entre_aspas() {
-            gravar_autostart(Some(&exe));
-        }
-    } else {
-        gravar_autostart(None);
-    }
+    gravar_autostart(comando().filter(|_| ligado).as_deref());
 }
 
-/// Autostart ligado mas apontando para outro caminho: reescreve para o exe atual. Sem isso,
-/// mover ou reinstalar o app deixa o Windows tentando abrir um arquivo que nao existe mais.
+/// Autostart ligado mas com outro comando (exe movido, ou entrada antiga sem `--bandeja`):
+/// reescreve para o atual. Sem isso o Windows tenta abrir um arquivo que nao existe mais.
 pub fn corrigir_autostart() {
-    let (Some(atual), Some(esperado)) = (ler_autostart(), exe_entre_aspas()) else { return };
+    let (Some(atual), Some(esperado)) = (ler_autostart(), comando()) else { return };
     if !atual.eq_ignore_ascii_case(&esperado) {
         gravar_autostart(Some(&esperado));
         log(&format!("autostart corrigido: {atual} -> {esperado}"));

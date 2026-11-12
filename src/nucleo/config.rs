@@ -49,11 +49,6 @@ impl Config {
             log(&format!("falha ao salvar config: {e}"));
         }
     }
-
-    /// Primeira execucao: ainda nao ha config gravada.
-    pub fn primeira_vez() -> bool {
-        !caminho_config().exists()
-    }
 }
 
 #[cfg(windows)]

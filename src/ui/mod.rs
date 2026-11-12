@@ -25,11 +25,12 @@ pub const LARGURA: f32 = 560.0;
 pub const ALTURA: f32 = 460.0;
 const VERSAO: &str = env!("CARGO_PKG_VERSION");
 const CAFE: &str = "https://buymeacoffee.com/mousehider";
+const OCULTAR: u8 = u8::MAX;
 
 /// Estado dividido entre a janela, a bandeja e as threads do Windows.
 pub struct Estado {
     pub config: Mutex<Config>,
-    /// Pedido de abrir a janela: 0 = nada, 1..=3 = aba + 1.
+    /// Pedido para a janela: 0 = nada, 1..=3 = mostrar na aba + 1, `OCULTAR` = esconder.
     pub abrir: AtomicU8,
 }
 
@@ -42,9 +43,9 @@ impl Estado {
         self.config.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// Pede para a janela aparecer na aba dada. Quem chama depois acorda o egui.
-    pub fn pedir_janela(&self, aba: Aba) {
-        self.abrir.store(aba as u8 + 1, Ordering::SeqCst);
+    /// Mostra a janela na aba dada, ou esconde com None. Quem chama depois acorda o egui.
+    pub fn pedir_janela(&self, aba: Option<Aba>) {
+        self.abrir.store(aba.map_or(OCULTAR, |a| a as u8 + 1), Ordering::SeqCst);
     }
 }
 
@@ -82,7 +83,9 @@ pub struct App {
     estado: Arc<Estado>,
     plataforma: Arc<dyn Plataforma>,
     aba: Aba,
-    oculto_no_inicio: bool,
+    /// O egui nao sabe se a janela esta oculta no Windows; sem isso o contador seguiria
+    /// redesenhando na bandeja.
+    visivel: bool,
     primeiro_quadro: bool,
     logo: Option<TextureHandle>,
     segundos: String,
@@ -104,7 +107,7 @@ impl App {
             estado,
             plataforma,
             aba: Aba::Geral,
-            oculto_no_inicio: !mostrar,
+            visivel: mostrar,
             primeiro_quadro: true,
             logo: None,
             segundos,
@@ -127,21 +130,19 @@ impl App {
             .id()
     }
 
-    /// Pedidos que chegam com a janela oculta (bandeja, segunda instancia) e mensagens das
-    /// threads de atualizacao.
+    /// Pedidos de mostrar/esconder (bandeja, minimizar, segunda instancia) e mensagens das
+    /// threads de atualizacao. Toda mudanca de visibilidade passa por aqui.
     fn processar(&mut self, ctx: &egui::Context) {
-        let pedido = self.estado.abrir.swap(0, Ordering::SeqCst);
-        if pedido != 0 {
-            self.aba = match pedido - 1 {
-                1 => Aba::Sistema,
-                2 => Aba::Sobre,
-                _ => Aba::Geral,
-            };
-            self.autostart = self.plataforma.autostart();
-            self.plataforma.antes_de_mostrar();
-            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
-            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
-            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+        match self.estado.abrir.swap(0, Ordering::SeqCst) {
+            0 => {}
+            OCULTAR => self.mostrar(ctx, false),
+            pedido => {
+                self.aba = [Aba::Geral, Aba::Sistema, Aba::Sobre][usize::from(pedido - 1).min(2)];
+                self.autostart = self.plataforma.autostart();
+                self.plataforma.antes_de_mostrar();
+                self.mostrar(ctx, true);
+                ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+            }
         }
 
         while let Ok(msg) = self.rx.try_recv() {
@@ -162,6 +163,11 @@ impl App {
                 Msg::Baixou(None) => Busca::Parado(Some((t(T::FalhaBaixar).into(), Tom::Perigo))),
             };
         }
+    }
+
+    fn mostrar(&mut self, ctx: &egui::Context, visivel: bool) {
+        self.visivel = visivel;
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(visivel));
     }
 
     fn alternar_pausa(&mut self) {
@@ -272,7 +278,9 @@ impl App {
         });
 
         // So o contador precisa de quadros sozinho; o resto redesenha por evento.
-        ui.ctx().request_repaint_after(Duration::from_millis(50));
+        if self.visivel {
+            ui.ctx().request_repaint_after(Duration::from_millis(50));
+        }
     }
 
     fn definir_limite(&mut self, segundos: u32) {
@@ -555,8 +563,9 @@ impl eframe::App for App {
     }
 
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if std::mem::take(&mut self.primeiro_quadro) && self.oculto_no_inicio {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+        // O eframe mostra a janela depois do primeiro quadro; aberto pelo login, esconde de novo.
+        if std::mem::take(&mut self.primeiro_quadro) && !self.visivel {
+            self.mostrar(ctx, false);
         }
         self.processar(ctx);
     }

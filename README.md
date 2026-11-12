@@ -86,7 +86,8 @@ cargo build --release
 
 **Bandeja:** clique no ícone para abrir a janela. O botão direito abre o menu, que espelha as
 abas (Geral, Sistema, Sobre), mais Pausar e Fechar. Minimizar a janela manda para a bandeja;
-o **X** encerra o app.
+o **X** encerra o app. Aberto pelo exe, o app mostra a janela; pelo *Iniciar com o Windows*,
+começa só no ícone da bandeja.
 
 ## Telas
 
