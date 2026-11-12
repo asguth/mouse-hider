@@ -1,0 +1,57 @@
+[package]
+name = "mouse-hider"
+version = "1.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Esconde o cursor do mouse depois de alguns segundos sem uso"
+license = "MIT"
+repository = "https://github.com/asguth/mouse-hider"
+publish = false
+
+[[bin]]
+name = "MouseHider"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.37", default-features = false, features = ["glow", "default_fonts"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11"
+tiny-skia = { version = "0.12", default-features = false, features = ["std", "simd", "png-format"] }
+memmap2 = "0.9"
+
+[target.'cfg(windows)'.dependencies]
+# Leitor de tela (Narrador, NVDA) le os controles proprios pelo accesskit.
+eframe = { version = "0.37", default-features = false, features = ["accesskit"] }
+tray-icon = "0.26"
+raw-window-handle = "0.6"
+ureq = { version = "3", default-features = false, features = ["native-tls"] }
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Globalization",
+    "Win32_Graphics_Dwm",
+    "Win32_Security",
+    "Win32_System_Console",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_SystemInformation",
+    "Win32_System_Threading",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+# Fora do Windows so roda a previa da interface (src/previa.rs).
+[target.'cfg(not(windows))'.dependencies]
+eframe = { version = "0.37", default-features = false, features = ["x11"] }
+
+[build-dependencies]
+winresource = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

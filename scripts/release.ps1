@@ -1,13 +1,13 @@
 <#
-    Publica uma versao nova de ponta a ponta:
+    Publica uma versao nova:
 
-        .\scripts\release.ps1 1.0.1
+        .\scripts\release.ps1 1.1.0
 
-    Grava a versao no csproj, publica o exe, compila o instalador, commita, marca a
-    tag e cria o release no GitHub. O asset sai sempre com o mesmo nome, entao o link
-    do site nunca muda:
+    Grava a versao no Cargo.toml, roda os testes e o selftest, commita, cria a tag e envia.
+    O GitHub Actions (.github/workflows/release.yml) compila e anexa o MouseHider.exe ao
+    release. O nome do arquivo nunca muda, entao o link de download tambem nao:
 
-        https://github.com/asguth/mouse-hider/releases/latest/download/MouseHiderSetup.exe
+        https://github.com/asguth/mouse-hider/releases/latest/download/MouseHider.exe
 #>
 param(
     [Parameter(Mandatory = $true)]
@@ -16,24 +16,10 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$raiz = Split-Path $PSScriptRoot -Parent
-Set-Location $raiz
+Set-Location (Split-Path $PSScriptRoot -Parent)
 
-$dotnet = "$env:ProgramFiles\dotnet\dotnet.exe"
-if (-not (Test-Path $dotnet)) { throw "nao encontrei o dotnet em $dotnet" }
-
-# O winget instala o Inno por usuario; instalacao manual costuma cair em Program Files (x86).
-$iscc = @(
-    "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
-    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-    "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
-) | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $iscc) { throw "Inno Setup nao encontrado (winget install JRSoftware.InnoSetup)" }
-
-# Executaveis nativos nao disparam excecao no PowerShell: o codigo de saida tem que ser
-# conferido na mao. E com ErrorActionPreference='Stop' qualquer linha que a ferramenta
-# escreva no stderr vira erro fatal — o git avisa sobre CRLF ali e derrubava o release.
-# Por isso a preferencia volta para 'Continue' durante a chamada nativa.
+# Executaveis nativos nao disparam excecao no PowerShell: o codigo de saida e conferido na mao.
+# E com 'Stop' qualquer linha no stderr (o cargo escreve progresso ali) viraria erro fatal.
 function Executar($descricao, $comando, $argumentos) {
     Write-Host "==> $descricao" -ForegroundColor Cyan
     $anterior = $ErrorActionPreference
@@ -43,50 +29,24 @@ function Executar($descricao, $comando, $argumentos) {
     if ($LASTEXITCODE -ne 0) { throw "$descricao falhou (exit $LASTEXITCODE)" }
 }
 
-# 1. O csproj e a fonte unica da versao — a tela Sobre e o instalador leem daqui.
-$csproj = "MouseHider\MouseHider.csproj"
-(Get-Content $csproj -Raw) -replace '<Version>[\d.]+</Version>', "<Version>$Versao</Version>" |
-    Set-Content $csproj -Encoding utf8 -NoNewline
+# 1. O Cargo.toml e a fonte unica da versao: a tela Sobre e a checagem de atualizacao leem dele.
+$toml = Get-Content Cargo.toml -Raw
+$toml = [regex]::Replace($toml, '(?m)^version = "[\d.]+"', "version = `"$Versao`"", 1)
+# WriteAllText: o Set-Content do Windows PowerShell 5.1 gravaria com BOM.
+[IO.File]::WriteAllText((Resolve-Path Cargo.toml), $toml, [Text.UTF8Encoding]::new($false))
 
-# 2. Self-contained (roda sem .NET instalado), mas em PASTA, nao em arquivo unico.
-#    PublishSingleFile com compressao produz um auto-extrator, e heuristica de antivirus
-#    trata auto-extrator como packer — foi o que deu Trojan:Win32/Wacatac.C!ml no
-#    VirusTotal. Em pasta, o exe e um apphost comum e as DLLs sao .NET normais.
-#    Quem junta tudo num download unico e o instalador.
-Executar "publicando o app" $dotnet @(
-    'publish', 'MouseHider\MouseHider.csproj', '-c', 'Release', '-r', 'win-x64',
-    '--self-contained', 'true', '-p:PublishSingleFile=false', '-p:DebugType=none',
-    '-o', 'dist', '--nologo'
-)
+Executar "testes" 'cargo' @('test', '--quiet')
+Executar "compilando" 'cargo' @('build', '--release', '--quiet')
 
-# Start-Process -Wait: MouseHider e WinExe, entao "& exe" devolve o prompt na hora e o
-# $LASTEXITCODE nao vale nada — o selftest passaria despercebido mesmo falhando.
-Write-Host "==> rodando o selftest" -ForegroundColor Cyan
-$teste = Start-Process "dist\MouseHider.exe" -ArgumentList '--selftest' -Wait -PassThru
+# Start-Process -Wait: o exe e de janela, entao "& exe" volta na hora e o codigo de saida
+# nao valeria nada.
+Write-Host "==> selftest" -ForegroundColor Cyan
+$teste = Start-Process 'target\release\MouseHider.exe' -ArgumentList '--selftest' -Wait -PassThru
 if ($teste.ExitCode -ne 0) { throw "selftest falhou (exit $($teste.ExitCode))" }
 
-# 3. Instalador. OutputBaseFilename esta fixo no .iss: e o que sustenta o link permanente.
-Executar "compilando o instalador" $iscc @("/DMyAppVersion=$Versao", 'installer\MouseHider.iss')
-
-# 4. Commit e tag.
-Executar "preparando o commit" 'git' @('add', '-A')
-
-$ErrorActionPreference = 'Continue'
-git diff --cached --quiet 2>&1 | Out-Null
-$temMudanca = $LASTEXITCODE -ne 0   # 1 = ha algo staged
-$ErrorActionPreference = 'Stop'
-if ($temMudanca) {
-    Executar "commit" 'git' @('commit', '-m', "Versao $Versao")
-}
+Executar "commit" 'git' @('commit', '-am', "Versao $Versao")
 Executar "tag" 'git' @('tag', '-a', "v$Versao", '-m', "Versao $Versao")
-Executar "push" 'git' @('push', 'origin', 'main', '--follow-tags')
-
-# 5. Release no GitHub com o asset de nome fixo.
-Executar "release" 'gh' @(
-    'release', 'create', "v$Versao", 'installer\Output\MouseHiderSetup.exe',
-    '--title', "v$Versao", '--generate-notes'
-)
+Executar "push" 'git' @('push', 'origin', 'HEAD', '--follow-tags')
 
 Write-Host ""
-Write-Host "pronto: v$Versao publicada" -ForegroundColor Green
-Write-Host "link do site (nao muda): https://github.com/asguth/mouse-hider/releases/latest/download/MouseHiderSetup.exe"
+Write-Host "pronto: v$Versao enviada. O GitHub Actions publica o exe em alguns minutos." -ForegroundColor Green
