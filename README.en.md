@@ -83,7 +83,8 @@ cargo build --release
 | **Light and dark** | Follows the system theme |
 
 **Tray:** click the icon to open the window; right-click for the menu (General, System,
-About, Pause, Close). Minimizing sends the window to the tray; **X** quits the app.
+About, Pause, Close). Minimizing sends the window to the tray; **X** quits the app. Launched from the exe, it shows the window; via *Start with Windows*,
+it starts as just the tray icon.
 
 <p align="center">
   <img src="docs/sistema.png" alt="System tab: start with Windows, language and update check" width="420">

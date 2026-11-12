@@ -16,7 +16,7 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::Graphics::Dwm::{DWMWA_CLOAK, DwmSetWindowAttribute};
 use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
-use windows_sys::Win32::UI::WindowsAndMessaging::{SC_MINIMIZE, SW_HIDE, ShowWindow, WM_SYSCOMMAND};
+use windows_sys::Win32::UI::WindowsAndMessaging::{SC_MINIMIZE, WM_SYSCOMMAND};
 
 use crate::nucleo::config::{self, Config, log};
 use crate::nucleo::plataforma::{ErroRede, Plataforma};
@@ -26,6 +26,9 @@ use crate::ui::{self, Aba, Estado};
 static ESTADO: OnceLock<Arc<Estado>> = OnceLock::new();
 static CONTEXTO: OnceLock<egui::Context> = OnceLock::new();
 static JANELA: AtomicIsize = AtomicIsize::new(0);
+
+/// Passado pelo autostart: o app comeca so no icone da bandeja. Aberto a mao, mostra a janela.
+pub(crate) const ARG_BANDEJA: &str = "--bandeja";
 
 pub fn principal(args: &[String]) -> i32 {
     if args.iter().any(|a| a == "--selftest") {
@@ -60,11 +63,8 @@ pub fn principal(args: &[String]) -> i32 {
         anterior(info);
     }));
 
-    let primeira_vez = Config::primeira_vez();
+    let oculto = !atualizado && args.iter().any(|a| a == ARG_BANDEJA);
     let config = Config::carregar();
-    if primeira_vez {
-        config.salvar(); // senao a janela abriria sozinha em todo login ate mudar algo
-    }
     idiomas::definir(&config.idioma, sistema::idioma());
     sistema::corrigir_autostart();
     permitir_menu_escuro();
@@ -108,13 +108,10 @@ pub fn principal(args: &[String]) -> i32 {
             {
                 let hwnd = w.hwnd.get();
                 JANELA.store(hwnd, Ordering::SeqCst);
-                preparar_janela(hwnd as HWND, !(primeira_vez || atualizado));
+                preparar_janela(hwnd as HWND, oculto);
             }
             bandeja::criar(estado.clone());
-            // Primeira execucao abre a janela: sem isso o app some na bandeja e parece que nao
-            // abriu. Depois de atualizar tambem, para a pessoa ver que deu certo.
-            let mostrar = primeira_vez || atualizado;
-            Ok(Box::new(ui::App::new(&cc.egui_ctx, estado, plataforma, mostrar)))
+            Ok(Box::new(ui::App::new(&cc.egui_ctx, estado, plataforma, !oculto)))
         }),
     );
     if let Err(e) = resultado {
@@ -131,8 +128,12 @@ pub fn principal(args: &[String]) -> i32 {
 /// Pede a janela e acorda o egui (ele nao roda sozinho com a janela oculta).
 pub(crate) fn abrir_janela(aba: Aba) {
     if let Some(estado) = ESTADO.get() {
-        estado.pedir_janela(aba);
+        estado.pedir_janela(Some(aba));
     }
+    acordar();
+}
+
+fn acordar() {
     if let Some(ctx) = CONTEXTO.get() {
         ctx.request_repaint();
     }
@@ -146,9 +147,7 @@ pub(crate) fn pausa_alterada(estado: &Estado) {
         cursor::restaurar();
     }
     bandeja::atualizar(estado);
-    if let Some(ctx) = CONTEXTO.get() {
-        ctx.request_repaint();
-    }
+    acordar();
     log(if pausado { "pausado" } else { "retomado" });
 }
 
@@ -221,11 +220,15 @@ fn preparar_janela(hwnd: HWND, abrir_oculta: bool) {
 }
 
 /// Minimizar some na bandeja em vez de virar botao na barra de tarefas: o app ja vive la.
-/// Intercepta o SC_MINIMIZE e nao repassa, entao a janela nunca fica minimizada e reabrir
-/// e um simples mostrar.
+/// Intercepta o SC_MINIMIZE e pede o esconder ao egui. Nada de ShowWindow direto: o winit
+/// guarda a visibilidade num flag proprio e so age quando ele muda; esconder por fora deixava
+/// o flag em "visivel" e o mostrar seguinte virava no-op (a bandeja nao reabria a janela).
 unsafe extern "system" fn subclasse(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM, _: usize, _: usize) -> LRESULT {
     if msg == WM_SYSCOMMAND && (wparam & 0xFFF0) == SC_MINIMIZE as usize {
-        unsafe { ShowWindow(hwnd, SW_HIDE) };
+        if let Some(estado) = ESTADO.get() {
+            estado.pedir_janela(None);
+        }
+        acordar();
         return 0;
     }
     unsafe { DefSubclassProc(hwnd, msg, wparam, lparam) }
