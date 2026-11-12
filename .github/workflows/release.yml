@@ -1,0 +1,29 @@
+# Tag vX.Y.Z enviada = release com o MouseHider.exe anexado. O nome do arquivo nunca muda:
+# e ele que sustenta o link permanente releases/latest/download/MouseHider.exe.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Tag confere com o Cargo.toml
+        shell: bash
+        run: |
+          versao=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          [ "v$versao" = "$GITHUB_REF_NAME" ] || { echo "Cargo.toml diz $versao, tag e $GITHUB_REF_NAME"; exit 1; }
+      - run: cargo test
+      - run: cargo build --release
+      - name: Publica
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" target/release/MouseHider.exe --title "$GITHUB_REF_NAME" --generate-notes
