@@ -1,10 +1,16 @@
-# Tag vX.Y.Z enviada = release com o MouseHider.exe anexado. O nome do arquivo nunca muda:
-# e ele que sustenta o link permanente releases/latest/download/MouseHider.exe.
+# Publica o MouseHider.exe num release. O nome do arquivo nunca muda: e ele que sustenta o
+# link permanente releases/latest/download/MouseHider.exe.
+#
+# Dois jeitos de disparar:
+#   - enviar uma tag vX.Y.Z (o scripts/release.ps1 faz isso);
+#   - Actions > Release > Run workflow: usa a versao do Cargo.toml e cria a tag se faltar.
+# Se o release ja existir (criado pela pagina do GitHub, com changelog), so anexa o exe.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -16,14 +22,24 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Tag confere com o Cargo.toml
+        id: versao
         shell: bash
         run: |
           versao=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-          [ "v$versao" = "$GITHUB_REF_NAME" ] || { echo "Cargo.toml diz $versao, tag e $GITHUB_REF_NAME"; exit 1; }
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [ "v$versao" != "$GITHUB_REF_NAME" ]; then
+            echo "Cargo.toml diz $versao, tag e $GITHUB_REF_NAME"; exit 1
+          fi
+          echo "tag=v$versao" >> "$GITHUB_OUTPUT"
       - run: cargo test
       - run: cargo build --release
       - name: Publica
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" target/release/MouseHider.exe --title "$GITHUB_REF_NAME" --generate-notes
+          TAG: ${{ steps.versao.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" target/release/MouseHider.exe --clobber
+          else
+            gh release create "$TAG" target/release/MouseHider.exe --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+          fi
