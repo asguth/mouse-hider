@@ -134,7 +134,7 @@ fn dib(lado: u32) -> Vec<u8> {
         saida.extend_from_slice(&v.to_le_bytes());
     }
     for y in (0..lado as usize).rev() {
-        for px in rgba[y * linha..(y + 1) * linha].chunks_exact(4) {
+        for px in rgba[y * linha..(y + 1) * linha].as_chunks::<4>().0 {
             saida.extend_from_slice(&[px[2], px[1], px[0], px[3]]);
         }
     }
